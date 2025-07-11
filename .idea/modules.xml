@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/../genai/.idea/genai.iml" filepath="$PROJECT_DIR$/../genai/.idea/genai.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/mftlabs_golden_sapphire.iml" filepath="$PROJECT_DIR$/.idea/mftlabs_golden_sapphire.iml" />
+    </modules>
+  </component>
+</project>

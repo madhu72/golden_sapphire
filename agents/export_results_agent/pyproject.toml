@@ -1,0 +1,16 @@
+[project]
+name = "goldensapphire_export_results_agent"
+version = "0.1.0"
+description = "Agent for executing parameterized SELECT queries on PostgreSQL"
+requires-python = ">=3.12"
+
+dependencies = [
+    "genai-protocol",
+    "python-dotenv>=1.0.0",
+    #"asyncpg>=0.29.0",
+    "pandas>=2.2.0",
+    "openpyxl>=3.1.2"
+]
+
+#!pip install loguru
+#!pip install genai-protocol
