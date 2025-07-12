@@ -41,6 +41,10 @@ async def schema_alias_context_agent(agent_context: GenAIContext) -> Dict:
                 "held": "status = 'Held'",
                 "queued": "status = 'Queued'",
                 'date':'create_time',
+                'message_type': 'msg_type',
+                'id': 'message_id',
+                'create_time': 'create_time::text',
+                'file_size': 'file_size',
             },
             "amf_delivery": {
                 "delivered": "status = 'Delivered'",
@@ -51,6 +55,17 @@ async def schema_alias_context_agent(agent_context: GenAIContext) -> Dict:
                 'active': "deleted= false",
 
                'deleted': "deleted= true",}
+        },
+        "table_relationships": {
+            "amf_message": {
+                "sender → amf_user.user_name": "m.sender = u.user_name",
+                "receiver → amf_user.user_name": "m.receiver = u.user_name",
+            },
+            "amf_delivery": {
+                "sender → amf_user.user_name": "d.sender = u.user_name",
+                "receiver → amf_user.user_name": "d.receiver = u.user_name",
+                "message_id → amf_message.message_id": "d.message_id = m.message_id"
+            }
         }
     }
 

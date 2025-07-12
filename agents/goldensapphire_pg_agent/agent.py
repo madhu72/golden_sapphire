@@ -10,6 +10,7 @@ from genai_session.utils.context import GenAIContext
 from genai_session.utils.agents import AgentResponse
 import traceback
 import re
+import requests
 
 def rewrite_table_aliases(sql: str, table_aliases: Dict[str, str]) -> str:
     for alias, real_name in table_aliases.items():
@@ -53,6 +54,46 @@ def resolve_table_alias(sql: str) -> str:
         sql = sql.replace(f" {alias},", f" {actual},")
     return sql
 
+def get_active_agent_id_by_name(agent_list: list[dict], target_name: str) -> str | None:
+    """
+    Finds the agent_id of an active agent matching the given name.
+
+    Args:
+        agent_list (list[dict]): List of agents from get_my_agents()
+        target_name (str): The name of the agent to find
+
+    Returns:
+        str | None: agent_id if active and found, else None
+    """
+    for agent in agent_list:
+        if (
+            agent.get("agent_name") == target_name
+            and agent.get("is_active", True)
+        ):
+            return agent.get("agent_id")
+    return None
+
+def get_my_agents(base_url) -> list[dict]:
+    """
+    Fetches the list of previously registered agents from the API using requests (sync).
+
+    Returns:
+        List of agent metadata dictionaries.
+    """
+    token = os.getenv("GENAI_JWT_TOKEN")
+    if not token:
+        raise ValueError("GENAI_JWT_TOKEN environment variable is not set")
+    if not base_url:
+        raise ValueError("API URL is not set")
+    url = f"{base_url}/api/agents"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
 AGENT_JWT = os.getenv("GENAI_JWT_TOKEN")
 session = GenAISession(jwt_token=AGENT_JWT)
 
@@ -91,7 +132,14 @@ async def postgres_query_agent(
     arguments: Annotated[Optional[Dict[str, Any]], "Dictionary of parameters to bind to the SQL query"],
 ) -> Any:
     """Executes SELECT queries on PostgreSQL with parameters"""
+    session_url = os.getenv("GENAI_API_BASE_URL")
+    if not session_url:
+        raise ValueError("GENAI_API_BASE_URL environment variable is not set")
     print(f'Active agent UUID: {agent_context.agent_uuid}')
+    data = get_my_agents(session_url)
+    agent_context.logger.info(f"Request: {request}, Arguments: {arguments}")
+#     agent_context.logger.info(f"Active agents: {data}")
+#     print(f"Active agents: {data}")
 #     print(f'Active agents list: {session.get_my_active_agents()}')
 #     agent_name = "schema_alias_context_agent"
 #     agent_context.logger.info(f'Fetching agent UUID for {agent_name}')
@@ -139,39 +187,48 @@ async def postgres_query_agent(
         await conn.close()
         result = [dict(row) for row in rows]
         agent_context.logger.info(f"Query returned {len(result)} rows")
-        if arguments:
-            export_format = arguments.get("export_format")  # Optional
-
-            if export_format:
-                export_response: AgentResponse = await session.send(
-                    agent_uuid="export_result_agent",  # Replace with real UUID or alias
-                    params={
-                        "data": result,
-                        "format": export_format
-                    }
-                )
-
-                if export_response.is_success:
-                    export_file_path = export_response.response.get("file_path")
-                    return {
-                        "success": True,
-                        "message": "Query and export successful",
-                        "data": result,
-                        "export_file_path": export_file_path
-                    }
-                else:
-                    return {
-                        "success": True,
-                        "message": "Query succeeded but export failed",
-                        "data": result,
-                        "export_error": export_response.response
-                    }
-        else:
-            return {
-                "success": True,
-                "message": "Query succeeded",
-                "data": result,
-            }
+#         if arguments:
+#             export_format = arguments.get("export_format")  # Optional
+#             if not export_format:
+#                 export_format = arguments.get("format", "csv")
+#
+#             if export_format:
+#                 agent_context.logger.info(f"Exporting result to {export_format} format")
+#                 # Send export request to export_result_agent
+#                 export_agent_name = "export_result_agent"  # Replace with real agent name or UUID
+#                 agents_list = await session.get_my_active_agents()
+#                 export_agent_uuid = next((agent.uuid for agent in agents_list if agent.name == export_agent_name), None)
+#                 if not export_agent_uuid:
+#                     raise Exception(f"Export agent '{export_agent_name}' not found")
+#                 export_response: AgentResponse = await session.send(
+#                     agent_uuid="export_result_agent",  # Replace with real UUID or alias
+#                     params={
+#                         "data": result,
+#                         "format": export_format
+#                     }
+#                 )
+#
+#                 if export_response.is_success:
+#                     export_file_path = export_response.response.get("file_path")
+#                     return {
+#                         "success": True,
+#                         "message": "Query and export successful",
+#                         "data": result,
+#                         "export_file_path": export_file_path
+#                     }
+#                 else:
+#                     return {
+#                         "success": True,
+#                         "message": "Query succeeded but export failed",
+#                         "data": result,
+#                         "export_error": export_response.response
+#                     }
+#         else:
+        return {
+            "success": True,
+            "message": "Query succeeded",
+            "data": result,
+        }
     except Exception as e:
         tb = traceback.format_exc()
         print("Error:", e)
