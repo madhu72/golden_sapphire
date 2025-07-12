@@ -4,13 +4,33 @@ from typing import Annotated, Any, Dict, Optional
 from dotenv import load_dotenv
 import asyncpg
 from loguru import logger
+import time
 
 from genai_session.session import GenAISession
 from genai_session.utils.context import GenAIContext
 from genai_session.utils.agents import AgentResponse
+from genai_session.utils.file_manager import FileManager
 import traceback
 import re
 import requests
+import datetime
+import decimal
+import uuid
+
+import pandas as pd
+import tempfile
+
+def make_json_serializable(obj):
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    elif isinstance(obj, (uuid.UUID, decimal.Decimal)):
+        return str(obj)
+    elif isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    else:
+        return obj
 
 def rewrite_table_aliases(sql: str, table_aliases: Dict[str, str]) -> str:
     for alias, real_name in table_aliases.items():
@@ -129,7 +149,8 @@ if SCHEMA_PATH:
 async def postgres_query_agent(
     agent_context: GenAIContext,
     request: Annotated[str, "SQL SELECT query to execute with placeholders like $1, $2, etc."],
-    arguments: Annotated[Optional[Dict[str, Any]], "Dictionary of parameters to bind to the SQL query"],
+    export_format: Annotated[str, "Optional export format (csv or excel)"] = 'excel',
+    arguments: Annotated[Optional[Dict[str, Any]], "Dictionary of parameters to bind to the SQL query"] = None,
 ) -> Any:
     """Executes SELECT queries on PostgreSQL with parameters"""
     session_url = os.getenv("GENAI_API_BASE_URL")
@@ -186,49 +207,55 @@ async def postgres_query_agent(
         rows = await conn.fetch(sql, *tuple(arguments.values()) if arguments else ())
         await conn.close()
         result = [dict(row) for row in rows]
+        for row in result:
+            for key, value in row.items():
+                row[key] = make_json_serializable(value)
         agent_context.logger.info(f"Query returned {len(result)} rows")
-#         if arguments:
-#             export_format = arguments.get("export_format")  # Optional
-#             if not export_format:
-#                 export_format = arguments.get("format", "csv")
-#
-#             if export_format:
-#                 agent_context.logger.info(f"Exporting result to {export_format} format")
-#                 # Send export request to export_result_agent
-#                 export_agent_name = "export_result_agent"  # Replace with real agent name or UUID
-#                 agents_list = await session.get_my_active_agents()
-#                 export_agent_uuid = next((agent.uuid for agent in agents_list if agent.name == export_agent_name), None)
-#                 if not export_agent_uuid:
-#                     raise Exception(f"Export agent '{export_agent_name}' not found")
-#                 export_response: AgentResponse = await session.send(
-#                     agent_uuid="export_result_agent",  # Replace with real UUID or alias
-#                     params={
-#                         "data": result,
-#                         "format": export_format
-#                     }
-#                 )
-#
-#                 if export_response.is_success:
-#                     export_file_path = export_response.response.get("file_path")
-#                     return {
-#                         "success": True,
-#                         "message": "Query and export successful",
-#                         "data": result,
-#                         "export_file_path": export_file_path
-#                     }
-#                 else:
-#                     return {
-#                         "success": True,
-#                         "message": "Query succeeded but export failed",
-#                         "data": result,
-#                         "export_error": export_response.response
-#                     }
-#         else:
-        return {
-            "success": True,
-            "message": "Query succeeded",
-            "data": result,
-        }
+        if export_format:
+           df = pd.DataFrame(result)
+           suffix = ".csv" if export_format == "csv" else ".xlsx"
+           filename = f"exported_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}{suffix}"
+           tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+           file_path = tmp_file.name
+
+           try:
+
+               if export_format == "csv":
+                   df.to_csv(file_path, index=False)
+               elif export_format == "excel":
+                   df.to_excel(file_path, index=False)
+               else:
+                   raise ValueError("Unsupported export format")
+               fm = FileManager(api_base_url=os.getenv("GENAI_API_BASE_URL"), session_id=agent_context.session_id,request_id=agent_context.request_id,jwt_token=AGENT_JWT)
+
+               file_id = await fm.save(open(file_path, 'rb').read(), filename)
+               agent_context.logger.info(f"Exported result to {file_path} with file_id {file_id}")
+               agent_context.logger.info(f"Exported result to {file_path}")
+               file_service_url = os.getenv("GENAI_API_BASE_URL", "http://localhost:8000")
+               print('File Id', make_json_serializable(file_id))
+               download_url = f"{file_service_url}/files/{file_id}"
+               content = await fm.get_by_id(file_id),
+               time.sleep(5)
+               return {
+                   "success": True,
+                   "message": f"Query and export to {export_format} successful",
+                   #"data": result,
+                   #"export_file": await fm.get_by_id(file_id),
+               }
+           except Exception as ex:
+               agent_context.logger.error(f"Export failed: {ex}")
+               return {
+                   "success": True,
+                   "message": "Query succeeded but export failed",
+                   #"data": result,
+                   "export_error": str(ex)
+               }
+        else:
+            return {
+                "success": True,
+                "message": "Query succeeded",
+                "data": result,
+            }
     except Exception as e:
         tb = traceback.format_exc()
         print("Error:", e)

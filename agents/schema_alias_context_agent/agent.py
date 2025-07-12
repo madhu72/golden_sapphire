@@ -24,7 +24,8 @@ async def schema_alias_context_agent(agent_context: GenAIContext) -> Dict:
         "table_aliases": {
             "users": "amf_user",
             "messages": "amf_message",
-            "deliveries": "amf_delivery"
+            "deliveries": "amf_delivery",
+            "customers": "amf_customer"
         },
         "column_value_mappings": {
             "amf_user": {
@@ -36,6 +37,7 @@ async def schema_alias_context_agent(agent_context: GenAIContext) -> Dict:
                 "phone":"phone_number",
             },
             "amf_message": {
+                "message_id":"message_id::text",
                 "delivered": "status = 'Delivered'",
                 "failed": "status = 'Failed'",
                 "held": "status = 'Held'",
@@ -53,10 +55,18 @@ async def schema_alias_context_agent(agent_context: GenAIContext) -> Dict:
                 "queued": "status = 'Queued'",
                 'date':'create_time',
                 'active': "deleted= false",
-
-               'deleted': "deleted= true",}
+               'deleted': "deleted= true",
+               },
+               "amf_customer": {
+                   # Add as needed, e.g.,
+                   "customer_name": "customer",
+                   "billing_id": "billing_id"
+               }
         },
         "table_relationships": {
+            "amf_user": {
+                "customer → amf_customer.customer_id": "u.customer_id = c.customer_id",
+            },
             "amf_message": {
                 "sender → amf_user.user_name": "m.sender = u.user_name",
                 "receiver → amf_user.user_name": "m.receiver = u.user_name",
@@ -64,7 +74,9 @@ async def schema_alias_context_agent(agent_context: GenAIContext) -> Dict:
             "amf_delivery": {
                 "sender → amf_user.user_name": "d.sender = u.user_name",
                 "receiver → amf_user.user_name": "d.receiver = u.user_name",
-                "message_id → amf_message.message_id": "d.message_id = m.message_id"
+                "file_size → amf_message.file_size": "d.message_id = m.message_id",
+                "message_id → amf_message.message_id": "d.message_id = m.message_id",
+                "status → amf_message.status": "d.message_id = m.message_id",
             }
         }
     }
