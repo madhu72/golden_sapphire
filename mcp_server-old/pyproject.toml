@@ -1,0 +1,15 @@
+[project]
+name = "goldensapphire_pg_agent"
+version = "0.1.0"
+description = "Agent for executing parameterized SELECT queries on PostgreSQL"
+requires-python = ">=3.12"
+
+dependencies = [
+    "genai-protocol",
+    "python-dotenv>=1.0.0",
+    "asyncpg>=0.29.0",
+    "fastmcp>=2.10.5",
+    "requests>=2.32.4",
+    "pydantic>=2.8.0",
+
+]
