@@ -31,6 +31,20 @@ from io import BytesIO
 import tempfile
 import asyncpg
 load_dotenv()
+
+
+async def get_agent_uuid_by_name(agent_name: str, jwt_token: str, api_base_url: str) -> str:
+    headers = {"Authorization": f"Bearer {jwt_token}"}
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{api_base_url}/api/agents", headers=headers) as resp:
+            agents = await resp.json()
+            #print('Fetched agents:', json.dumps(agents, indent=4))  # Debugging: print all agents
+            for agent in agents:
+                #print('agents list:',json.dumps(agent, indent=4))  # Debugging: print each agent's details
+                if agent.get("agent_name") == agent_name:
+                    return agent["agent_id"]
+    raise ValueError(f"Agent '{agent_name}' not found.")
+
 async def fetch_query_results(pg_url: str, sql: str, arguments: dict = None) -> list[dict]:
     """
     Executes a SQL query using asyncpg and returns the result as a list of dictionaries.
@@ -258,7 +272,12 @@ async def gs_data_export( input: GSDataExportInput,ctx: Context) -> dict:
 #                     "request": input.request
 #                 }
 #             )
-    agent_uuid = "33024775-349d-4d05-ba9d-2fba91c9796d"
+
+
+    jwt_token = os.getenv("GENAI_JWT_TOKEN")
+    api_base_url = os.getenv("GENAI_API_BASE_URL")
+    agent_uuid = await get_agent_uuid_by_name('gs_sql_generator', jwt_token, api_base_url)
+    #agent_uuid = "33024775-349d-4d05-ba9d-2fba91c9796d"
     message = {
         "schema_context": schema_context,
         "schema_definition": schema_text,
