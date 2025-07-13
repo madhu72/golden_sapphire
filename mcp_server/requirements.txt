@@ -1,2 +1,12 @@
-
+genai-protocol
 fastmcp
+fastapi
+uvicorn
+pydantic
+aiohttp
+requests
+httpx
+pandas
+starlette
+loguru
+websockets

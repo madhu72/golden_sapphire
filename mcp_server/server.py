@@ -19,6 +19,39 @@ import traceback
 import time
 import pandas as pd
 from fastapi import FastAPI
+import hmac
+import hashlib
+import time
+import base64
+from urllib.parse import urlencode
+
+SECRET_KEY = os.getenv("SIGNED_SECRET_KEY", "very long secret key for download file securely")
+
+def generate_signed_url(file_id: str, expires_in: int = 600):
+    expires = int(time.time()) + expires_in
+    data = f"{file_id}:{expires}"
+    signature = hmac.new(SECRET_KEY.encode(), data.encode(), hashlib.sha256).digest()
+    signature_b64 = base64.urlsafe_b64encode(signature).decode().rstrip("=")
+
+    query = urlencode({
+        "expires": expires,
+        "signature": signature_b64
+    })
+
+    return f"/proxy/download/{file_id}?{query}"
+
+from fastapi import Request, HTTPException
+
+def verify_signature(file_id: str, expires: str, signature: str):
+    if int(expires) < int(time.time()):
+        raise HTTPException(status_code=403, detail="Link expired")
+
+    data = f"{file_id}:{expires}"
+    expected_sig = hmac.new(SECRET_KEY.encode(), data.encode(), hashlib.sha256).digest()
+    expected_sig_b64 = base64.urlsafe_b64encode(expected_sig).decode().rstrip("=")
+
+    if not hmac.compare_digest(signature, expected_sig_b64):
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
 session = GenAISession(jwt_token=os.getenv("JWT_SECRET", "default_jwt_token"))
 
@@ -52,6 +85,18 @@ GENAI_JWT_TOKEN = os.getenv("GENAI_JWT_TOKEN")
 @mcp.custom_route("/proxy/download/{file_id}", methods=["GET"])
 async def proxy_download(ctx):
     file_id = ctx.path_params.get("file_id")
+    q = ctx.query_params
+    signature = q.get("signature")
+    expires = q.get("expires")
+
+    if not signature or not expires:
+        return {"error": "Missing signature or expiration"}
+
+    try:
+        verify_signature(file_id, expires, signature)
+    except HTTPException as e:
+        return {"error": e.detail}
+
     jwt_token = os.getenv("GENAI_JWT_TOKEN")
     api_base_url = os.getenv("GENAI_API_BASE_URL")
     headers = {"Authorization": f"Bearer {jwt_token}"}
@@ -167,7 +212,8 @@ async def csv_to_json(file_id: str, ctx: Context) -> Dict:
             "filename": filename,
             "message": f"CSV file successfully converted to JSON with {file_id}",
             "content_preview": content[:500] ,
-             "download_link": f"https://svc.thotavrao.com/proxy/download/{file_id}"# just a preview
+             #"download_link": f"https://svc.thotavrao.com/proxy/download/{file_id}"# just a preview
+            "download_link": f"https://svc.thotavrao.com{generate_signed_url(file_id)}"  # Use signed URL for secure download
         }
 
     except Exception as e:
