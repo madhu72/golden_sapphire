@@ -18,6 +18,10 @@ This project demonstrates how to build and deploy powerful data transformation a
 - Supports output in **CSV**, **JSON**, and **Excel**.
 - Exports results and provides signed download link.
 
+## 📊 Architecture Overview
+
+![AI-powered Data Export](golden_sapphire.png)
+
 ### ✅ Proxy Download Route
 - Secured proxy download route using JWT and HMAC signature with expiry.
 
