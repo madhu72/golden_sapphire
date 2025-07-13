@@ -227,8 +227,9 @@ async def postgres_query_agent(
                else:
                    raise ValueError("Unsupported export format")
                fm = FileManager(api_base_url=os.getenv("GENAI_API_BASE_URL"), session_id=agent_context.session_id,request_id=agent_context.request_id,jwt_token=AGENT_JWT)
-
-               file_id = await fm.save(open(file_path, 'rb').read(), filename)
+               with open(file_path, "rb") as f:
+                   file_bytes = f.read()
+               file_id = await fm.save(file_bytes, filename)
                agent_context.logger.info(f"Exported result to {file_path} with file_id {file_id}")
                agent_context.logger.info(f"Exported result to {file_path}")
                file_service_url = os.getenv("GENAI_API_BASE_URL", "http://localhost:8000")
